@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Okuma Oyunu - Final</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #4a90e2; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
+    #intro-screen, #mode-selection { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #4a90e2; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+    .mode-btn { padding: 15px 30px; font-size: 18px; font-weight: bold; color: #4a90e2; background: white; border: none; border-radius: 50px; cursor: pointer; margin: 8px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); transition: 0.2s; width: 280px; }
+    .mode-btn:hover { transform: scale(1.05); }
+    .scoreboard { position: absolute; top: 20px; right: 20px; display: none; flex-direction: column; gap: 10px; z-index: 100; }
+    .score-box { background: white; padding: 8px 15px; border-radius: 20px; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    .game { background: #ffffff; padding: 24px; border-radius: 25px; width: 90%; max-width: 500px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.2); display: none; }
+    .scene img { width: 100%; height: 200px; object-fit: contain; margin-bottom: 10px; }
+    .sentence-display { font-size: 20px; font-weight: bold; margin: 15px 0; color: #333; }
+    .options { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+    .option { flex: 1; min-width: 100px; max-width: 130px; cursor: pointer; transition: 0.2s; }
+    .option img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 15px; border: 4px solid #eee; }
+    .syllable-slots, .sentence-build-area { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+    .slot, .word-slot { min-width: 45px; height: 45px; border: 3px dashed #ccc; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; color: #4a90e2; padding: 0 5px; }
+    .slot.filled { border-style: solid; border-color: #4a90e2; background: #e3f2fd; }
+    .success-msg { color: #2e7d32; font-weight: bold; font-size: 20px; margin-bottom: 15px; }
+    .try-again-msg { color: #d32f2f; font-weight: bold; font-size: 18px; animation: shake 0.5s; }
+    .final-img { width: 100%; max-width: 300px; border-radius: 20px; margin: 15px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }
+    .nav-btn { padding: 8px 15px; border-radius: 10px; border: none; background: #4a90e2; color: white; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<audio id="bgMusic" loop preload="auto">
+  <source src="https://www.soundhelix.com/examplundHelix-Song-1.mp3" type="audio/mpeg">
+</audio>
+<audio id="correctSound" preload="auto">
+  <source src="file:///C:/Users/USER/Desktop/bvcxc/correct.mp3" type="audio/wav">
+</audio>
+<audio id="wrongSound" preload="auto">
+  <source src="wrong.wav" type="audio/wav">
+</audio>
+
+<div id="intro-screen">
+  <div style="color:white; font-size:32px; font-weight:bold; margin-bottom:30px;">EĞİTİCİ OKUMA OYUNU</div>
+  <button class="mode-btn" onclick="startAudioAndShowModes()">OYUNA BAŞLA</button>
+</div>
+
+<div id="mode-selection" style="display:none;">
+  <h2 style="color:white; margin-bottom:20px;">BİR MOD SEÇ</h2>
+  <button class="mode-btn" onclick="initGame('kelime')">1. Kelime Yerleştirme</button>
+  <button class="mode-btn" onclick="initGame('hece')">2. Heceleme</button>
+  <button class="mode-btn" onclick="initGame('cumle')">3. Cümle Oluşturma</button>
+</div>
+
+<div class="scoreboard" id="scoreboard">
+  <div class="score-box">✅: <span id="correct-count">0</span></div>
+  <div class="score-box">❌: <span id="wrong-count">0</span></div>
+</div>
+
+<div class="game" id="game-container">
+  <div id="game-ui">
+    <div class="scene"><img id="sceneImage" src=""></div>
+    <div id="sentence-display" class="sentence-display"></div>
+    <div id="sentence-build-area" class="sentence-build-area" style="display:none;"></div>
+    <div id="syllable-area" class="syllable-slots" style="display:none;"></div>
+    <div id="options" class="options"></div>
+    <div id="message" style="min-height: 30px; margin-top: 10px;"></div>
+  </div>
+  <div class="nav-buttons" id="nav-area">
+    <button id="prevBtn" class="nav-btn" onclick="prevQuestion()">⬅ Geri</button>
+    <button id="nextBtn" class="nav-btn" onclick="nextQuestion()">İleri ➡</button>
+  </div>
+</div>
+
+<script>
+  let corrects = 0, wrongs = 0, index = 0, currentMode = '', step = 0;
+
+  // SORULAR (Yüklediğin dosyadaki veriler)
+  const wordQuestions = [
+    { scene: "https://png.pngtree.com/png-vector/20250602/ourmid/pngtree-cute-boy-writing-in-notebook-at-wooden-desk-png-image_16450539.png", sentence: "..... masaya bırak", correct: "kalemi", completed: "Kalemi masaya bırak", options: [{word:"kalemi", img:"https://png.pngtree.com/png-vector/20250512/ourmid/pngtree-worn-pencil-illustration-png-image_16200319.png"}, {word:"arabayı", img:"https://w7.pngwing.com/pngs/64/222/png-transparent-car-transport-cartoon-car-child-vehicle-cartoon-car-thumbnail.png"}, {word:"suyu", img:"https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png"}]},
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ74u_kPgLWgjMEE0nTc4K5StdfzB-f1gxIWw&s", sentence: "..... garaja koy", correct: "arabayı", completed: "Arabayı garaja koy", options: [{word:"kalemi", img:"https://png.pngtree.com/png-vector/20250512/ourmid/pngtree-worn-pencil-illustration-png-image_16200319.png"}, {word:"arabayı", img:"https://w7.pngwing.com/pngs/64/222/png-transparent-car-transport-cartoon-car-child-vehicle-cartoon-car-thumbnail.png"}, {word:"suyu", img:"https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png"}]},
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnC6BbEDczZzm26QHSKNIsco35bajczQBFrQ&s", sentence: "..... bardağa dök", correct: "suyu", completed: "Suyu bardağa dök", options: [{word:"kalemi", img:"https://png.pngtree.com/png-vector/20250512/ourmid/pngtree-worn-pencil-illustration-png-image_16200319.png"}, {word:"arabayı", img:"https://w7.pngwing.com/pngs/64/222/png-transparent-car-transport-cartoon-car-child-vehicle-cartoon-car-thumbnail.png"}, {word:"suyu", img:"https://png.pngtree.com/png-vector/20240122/ourlarge/pngtree-water-bottle-symbol-png-image_11454206.png"}]},
+    { scene: "https://media.istockphoto.com/id/1195520518/tr/vekt%C3%B6r/makas%C4%B1-ile-renk-ka%C4%9F%C4%B1t-kesme-boy.jpg?s=1024x1024&w=is&k=20&c=1Da2PpSLeHihRT4_cin4tnpfEAPg2iakuI5oTeNoz2o=", sentence: "..... ile kağıdı kes", correct: "makas", completed: "Makas ile kağıdı kes", options: [{word:"kalemi", img:"https://png.pngtree.com/png-vector/20250512/ourmid/pngtree-worn-pencil-illustration-png-image_16200319.png"}, {word:"makas", img:"https://img.pikbest.com/origin/09/23/07/62QpIkbEsTfeI.png!sw800"}, {word:"suyu", img:"https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png"}]},
+    { scene: "https://png.pngtree.com/png-vector/20240723/ourmid/pngtree-cute-happy-boy-choosing-clothes-png-image_12951324.png", sentence: "..... askılığa as", correct: "t-shirtü", completed: "T-shirtü askılığa as", options: [{word:"suyu", img:"https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png"}, {word:"t-shirtü", img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7Nq3Qctg6XjnHE6I9bm80xm07Cwk7cMq9QQ&s"}, {word:"topu", img:"https://img.pikbest.com/origin/10/48/90/33jpIkbEsTrVM.png!w700wp"}]},
+    { scene: "https://png.pngtree.com/png-vector/20250513/ourmid/pngtree-happy-cartoon-kids-listening-to-music-with-headphones-png-image_16258685.png", sentence: "..... kulağına tak", correct: "kulaklığı", completed: "Kulaklığı kulağına tak", options: [{word:"t-shirtü", img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7Nq3Qctg6XjnHE6I9bm80xm07Cwk7cMq9QQ&s"}, {word:"tebeşiri", img:"https://png.pngtree.com/png-vector/20240905/ourmid/pngtree-white-chalk-png-image_13760072.png"}, {word:"kulaklığı", img:"https://png.pngtree.com/png-vector/20221009/ourlarge/pngtree-headphone-vector-clip-art-png-image_6291295.png"}]},
+    { scene: "https://png.pngtree.com/png-clipart/20240430/original/pngtree-student-erasing-blackboard-in-class-cartoon-png-image_14974457.png", sentence: "tahtaya ....... ile yaz", correct: "tebeşir", completed: "Tahtaya tebeşir ile yaz", options: [{word:"su", img:"https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png"}, {word:"kulaklık", img:"https://png.pngtree.com/png-vector/20221009/ourlarge/pngtree-headphone-vector-clip-art-png-image_6291295.png"}, {word:"tebeşir", img:"https://png.pngtree.com/png-vector/20240905/ourmid/pngtree-white-chalk-png-image_13760072.png"}]},
+    { scene: "https://st4.depositphotos.com/1967477/21917/v/950/depositphotos_219175762-stock-illustration-vector-illustration-cartoon-boy-playing.jpg", sentence: "Ali ..... çalıyor", correct: "gitar", completed: "Ali gitar çalıyor", options: [{word:"gitar", img:"https://png.pngtree.com/png-vector/20241225/ourmid/pngtree-classical-acoustic-guitar-clipart-vector-png-image_14837629.png"}, {word:"top", img:"https://img.pikbest.com/origin/10/48/90/33jpIkbEsTrVM.png!w700wp"}, {word:"arabayı", img:"https://w7.pngwing.com/pngs/64/222/png-transparent-car-transport-cartoon-car-child-vehicle-cartoon-car-thumbnail.png"}]},
+    { scene: "https://png.pngtree.com/png-vector/20250408/ourmid/pngtree-boy-playing-soccer-png-image_15951225.png", sentence: "..... kaleye at", correct: "topu", completed: "Topu kaleye at", options: [{word:"topu", img:"https://img.pikbest.com/origin/10/48/90/33jpIkbEsTrVM.png!w700wp"}, {word:"makas", img:"https://img.pikbest.com/origin/09/23/07/62QpIkbEsTfeI.png!sw800"}, {word:"kalem", img:"https://png.pngtree.com/png-vector/20250512/ourmid/pngtree-worn-pencil-illustration-png-image_16200319.png"}]}
+  ];
+
+  const syllableQuestions = [
+    { scene: "https://png.pngtree.com/png-vector/20231017/ourmid/pngtree-3d-red-apple-png-with-green-leaf-png-image_10201408.png", word: "KIRMIZI ELMA", syllables: ["KIR", "MI", "ZI", "EL", "MA"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTE5Be0gn0QlrV3p0CTN95K5Qev2azwkMCbRg&s", word: "KİTAPLIK", syllables: ["Kİ", "TAP", "LIK"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQac8C6PWQEcYSWRV7yt_x6qNTs6qdACiEnvg&s", word: "ÇALAR SAAT", syllables: ["ÇA", "LAR", "SA", "AT"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7Nq3Qctg6XjnHE6I9bm80xm07Cwk7cMq9QQ&s", word: "SARI T-SHIRT", syllables: ["SA", "RI", "T-", "SHIRT"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSGMZUK-3uxYfk1CeClyhOjFCTxbkVYs9_-gg&s", word: "SANDALYE", syllables: ["SAN", "DAL", "YE"] },
+    { scene: "https://png.pngtree.com/png-vector/20221009/ourlarge/pngtree-headphone-vector-clip-art-png-image_6291295.png", word: "KULAKLIK", syllables: ["KU", "LAK", "LIK"] },
+    { scene: "https://w7.pngwing.com/pngs/64/222/png-transparent-car-transport-cartoon-car-child-vehicle-cartoon-car-thumbnail.png", word: "ARABA", syllables: ["A", "RA", "BA"] },
+    { scene: "https://png.pngtree.com/png-vector/20230808/ourmid/pngtree-glass-of-water-clipart-fresh-water-glass-png-image_6870123.png", word: "BARDAK", syllables: ["BAR", "DAK"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTPTRNRlKwAAAtaSXLIyWYvznGsmKHceakcyg&s", word: "GERİ DÖNÜŞÜM", syllables: ["GE", "Rİ", "DÖ", "NÜ", "ŞÜM"] }
+  ];
+
+  const sentenceQuestions = [
+    { scene: "https://st4.depositphotos.com/1967477/21917/v/950/depositphotos_219175762-stock-illustration-vector-illustration-cartoon-boy-playing.jpg", correctWords: ["ALİ", "GİTAR", "ÇALIYOR"], shuffleWords: ["ÇALIYOR", "ALİ", "GİTAR"] },
+    { scene: "https://png.pngtree.com/png-vector/20250408/ourmid/pngtree-boy-playing-soccer-png-image_15951225.png", correctWords: ["ÇOCUK", "TOP", "OYNUYOR"], shuffleWords: ["TOP", "OYNUYOR", "ÇOCUK"] },
+    { scene: "https://w7.pngwing.com/pngs/190/21/png-transparent-man-inside-coupe-art-lightning-mcqueen-mater-cars-cartoon-car-car-orange-car-cartoon-car-cars-posters-element-cartoon-character-compact-car-driving-thumbnail.png", correctWords: ["BABA", "ARABAYI", "SÜRÜYOR"], shuffleWords: ["SÜRÜYOR", "BABA", "ARABAYI"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnC6BbEDczZzm26QHSKNIsco35bajczQBFrQ&s", correctWords: ["AYŞE", "BARDAĞA", "SU", "KOYUYOR"], shuffleWords: ["BARDAĞA", "AYŞE", "SU", "KOYUYOR"] },
+    { scene: "https://media.istockphoto.com/id/1195520518/tr/vekt%C3%B6r/makas%C4%B1-ile-renk-ka%C4%9F%C4%B1t-kesme-boy.jpg?s=1024x1024&w=is&k=20&c=1Da2PpSLeHihRT4_cin4tnpfEAPg2iakuI5oTeNoz2o=", correctWords: ["CAN", "KAĞIT", "KESİYOR"], shuffleWords: ["KAĞIT", "KESİYOR", "CAN"] },
+    { scene: "https://png.pngtree.com/png-vector/20250602/ourmid/pngtree-cute-boy-writing-in-notebook-at-wooden-desk-png-image_16450539.png", correctWords: ["EMRE", "YAZI", "YAZIYOR"], shuffleWords: ["YAZIYOR", "YAZI", "EMRE"] },
+    { scene: "https://png.pngtree.com/png-vector/20240723/ourmid/pngtree-cute-happy-boy-choosing-clothes-png-image_12951324.png", correctWords: ["MERT", "KIYAFET", "SEÇİYOR"], shuffleWords: ["SEÇİYOR", "MERT", "KIYAFET"] },
+    { scene: "https://png.pngtree.com/png-clipart/20240430/original/pngtree-student-erasing-blackboard-in-class-cartoon-png-image_14974457.png", correctWords: ["İLAYDA", "TAHTAYA", "YAZI", "YAZIYOR"], shuffleWords: ["YAZI", "İLAYDA", "TAHTAYA", "YAZIYOR"] },
+    { scene: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRYh0KVkBAZHvjFtp2R81dF1VxTPe9j247Www&s", correctWords: ["MUHAMMED", "ÇÖPÜNÜ", "ÇÖP", "KUTUSUNA", "ATIYOR"], shuffleWords: ["MUHAMMED", "KUTUSUNA", "ÇÖP", "ATIYOR", "ÇÖPÜNÜ"] }
+  ];
+
+  function startAudioAndShowModes() {
+    const bg = document.getElementById("bgMusic");
+    bg.volume = 0.15;
+    bg.play().catch(e => console.log("Otomatik oynatma engellendi."));
+    showModes();
+  }
+
+  function playSound(id) {
+    const s = document.getElementById(id);
+    if(s) {
+      s.currentTime = 0;
+      s.play().catch(e => console.log("Ses hatası: " + id));
+    }
+  }
+
+  function showModes() {
+    document.getElementById("intro-screen").style.display = "none";
+    document.getElementById("mode-selection").style.display = "flex";
+  }
+
+  function initGame(mode) {
+    currentMode = mode; index = 0; corrects = 0; wrongs = 0;
+    updateScores();
+    document.getElementById("mode-selection").style.display = "none";
+    document.getElementById("game-container").style.display = "block";
+    document.getElementById("scoreboard").style.display = "flex";
+    loadQuestion();
+  }
+
+  function updateScores() {
+    document.getElementById("correct-count").innerText = corrects;
+    document.getElementById("wrong-count").innerText = wrongs;
+  }
+
+  function loadQuestion() {
+    const questions = currentMode === 'kelime' ? wordQuestions : (currentMode === 'hece' ? syllableQuestions : sentenceQuestions);
+    const q = questions[index];
+    document.getElementById("sceneImage").src = q.scene;
+    document.getElementById("message").innerHTML = "";
+    document.getElementById("options").innerHTML = "";
+    document.getElementById("sentence-display").innerText = "";
+    document.getElementById("sentence-build-area").style.display = "none";
+    document.getElementById("syllable-area").style.display = "none";
+    document.getElementById("prevBtn").disabled = index === 0;
+    document.getElementById("nextBtn").disabled = index === questions.length - 1;
+    if (currentMode === 'kelime') loadWordMode(q);
+    else if (currentMode === 'hece') loadSyllableMode(q);
+    else if (currentMode === 'cumle') loadSentenceBuildMode(q);
+  }
+
+  function loadWordMode(q) {
+    document.getElementById("sentence-display").innerText = q.sentence;
+    q.options.forEach(opt => {
+      const div = document.createElement("div");
+      div.className = "option";
+      div.innerHTML = `<img src="${opt.img}"><span>${opt.word}</span>`;
+      div.onclick = () => {
+        if(opt.word === q.correct) { 
+            document.getElementById("sentence-display").innerHTML = `<strong>${q.completed}</strong>`;
+            handleSuccess(); 
+        } else { handleWrong(); }
+      };
+      document.getElementById("options").appendChild(div);
+    });
+  }
+
+  function loadSyllableMode(q) {
+    step = 0;
+    const area = document.getElementById("syllable-area");
+    area.style.display = "flex";
+    area.innerHTML = q.syllables.map(() => `<div class="slot"></div>`).join('');
+    [...q.syllables].sort(() => Math.random() - 0.5).forEach(s => {
+      const btn = document.createElement("button");
+      btn.className = "mode-btn"; btn.style.width = "auto"; btn.innerText = s;
+      btn.onclick = () => {
+        if(s === q.syllables[step]) {
+          document.querySelectorAll('.slot')[step].innerText = s;
+          document.querySelectorAll('.slot')[step].classList.add('filled');
+          btn.style.visibility = "hidden";
+          step++;
+          if(step === q.syllables.length) handleSuccess();
+        } else { handleWrong(); }
+      };
+      document.getElementById("options").appendChild(btn);
+    });
+  }
+
+  function loadSentenceBuildMode(q) {
+    step = 0;
+    const area = document.getElementById("sentence-build-area");
+    area.style.display = "flex";
+    area.innerHTML = q.correctWords.map(() => `<div class="word-slot"></div>`).join('');
+    q.shuffleWords.forEach(w => {
+      const btn = document.createElement("button");
+      btn.className = "mode-btn"; btn.style.width = "auto"; btn.innerText = w;
+      btn.onclick = () => {
+        if(w === q.correctWords[step]) {
+          document.querySelectorAll('.word-slot')[step].innerText = w;
+          btn.style.visibility = "hidden";
+          step++;
+          if(step === q.correctWords.length) handleSuccess();
+        } else { handleWrong(); }
+      };
+      document.getElementById("options").appendChild(btn);
+    });
+  }
+
+  function handleSuccess() {
+    playSound("correctSound");
+    corrects++; updateScores();
+    document.getElementById("message").innerHTML = '<div class="success-msg">Harika! 🎉</div>';
+    setTimeout(() => {
+      const qs = currentMode === 'kelime' ? wordQuestions : (currentMode === 'hece' ? syllableQuestions : sentenceQuestions);
+      if (index < qs.length - 1) { index++; loadQuestion(); }
+      else showFinal();
+    }, 1800);
+  }
+
+  function handleWrong() {
+    playSound("wrongSound"); 
+    wrongs++; updateScores();
+    document.getElementById("message").innerHTML = '<div class="try-again-msg">Tekrar Dene! ❌</div>';
+  }
+
+  // YENİ SHOWFINAL FONKSİYONU: RESİM EKLENDİ
+  function showFinal() {
+    document.getElementById("game-ui").innerHTML = `
+      <div class="success-msg">TEBRİKLER! TAMAMLADIN! 🎊</div>
+      <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTeji0Nk0snFBqkGn0-NjDWOB2cF6dffngmlw&s" class="final-img">
+      <br>
+      <button class="mode-btn" onclick="location.reload()">Başa Dön</button>
+    `;
+    document.getElementById("nav-area").style.display = "none";
+  }
+
+  function nextQuestion() { index++; loadQuestion(); }
+  function prevQuestion() { index--; loadQuestion(); }
+</script>
+</body>
+</html>
